@@ -1,16 +1,17 @@
 # Serverless Application and Terraform to Automate Infrastructure
 
-Explain what is Terraform and the usage of it. Explain also the goal
-related to previous project (trying to automate that process)
+## 👩‍💻 Contributors 🧑‍💻
 
-Along creating the TF code, we can also show the corresponding parts
-doing manually "to increase pages" 😉
+| Name                      | Email              |
+| ------------------------- | ------------------ |
+| Didier Yamil Reyes Castro | UO287866@uniovi.es |
+| Raúl Mera Soto            | UO287827@uniovi.es |
 
 ## Setting up Terraform
 - Go to https://developer.hashicorp.com/terraform/install?product_intent=terraform
 - Download the file realated to your OS (this case, Windows)
-- A zip is downloaded, unzip it on C:\terraform f.i.
-- Go to Advanced System Settings > Environmente Variables
+- A zip is downloaded, unzip it on C:\terraform or any other folder
+- Go to Advanced System Settings > Environment Variables
 - Select the *path* variable > Add the paht where Terraform executable is C:\terraform
 - Powershell: terraform -version
 
@@ -60,8 +61,7 @@ advisable to write up in front the credentials.
 4. Just select an option (this is just Amazon's way to warn you on creating
    these keys for certain use cases. Ex: if token is used for third party like
    Terraform we can see that a best practice is ... -> Just an advise)
-5. I haven't captured it but after creation it shows to you
-   ID Key (public) and Secret Key (private) and an option to download a CSV file
+5. After creation it shows to you ID Key (public) and Secret Key (private) and an option to download a CSV file
    with these info.
 6. If we go to https://registry.terraform.io/providers/hashicorp/aws/latest/docs
    we can find the section of "Authentication and Configuration". There it is shown
@@ -106,99 +106,187 @@ For this, we followed https://spacelift.io/blog/terraform-aws-lambda
 7. $ terraform apply -> Automate!! 
 
 ## Full main.tf
-```js
-// Setting the terraform configuration
-// Docs on providers:  https://developer.hashicorp.com/terraform/language/providers
-// For this project, AWS provider is required: 
-// https://registry.terraform.io/providers/hashicorp/aws/latest/docs
-terraform {
-  required_version = ">= 0.12"
-    
-  required_providers {
-    aws = {
-        source  = "hashicorp/aws"
-        version = "~> 5.0"
-    }
-  }
-}
-
-// Configuring the provider
-// We could also define a profile = "nameProfile"
-// If not set, "default" profile is taken
-provider "aws" {
-    region = "eu-central-1"
-    shared_credentials_files = ["/Users/didie/.aws/credentials"]
-}
-
-// Creating IAM Role
-// https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role
-// If following blog, you need to <<EOF but seems with newer versions now JSON is supported
-resource "aws_iam_role" "lambda_role"{
-    name    =   "asr_test_lambda_role"
-    assume_role_policy  = jsonencode({
-        Version = "2012-10-17"
-        Statement = [
-            {
-                Action = "sts:AssumeRole"
-                Effect = "Allow"
-                Sid    = ""
-                Principal = {
-                    Service = "lambda.amazonaws.com"
-                }
+```hcl
+    /*  
+        *************************************************************
+        ********************** 0-provider.tf ************************
+        *************************************************************
+    */
+    // Setting the terraform configuration
+    // Docs on providers:  https://developer.hashicorp.com/terraform/language/providers
+    // For this project, AWS provider is required: 
+    // https://registry.terraform.io/providers/hashicorp/aws/latest/docs
+    terraform {
+        required_version = ">= 0.12"
+        
+        required_providers {
+            aws = {
+                source  = "hashicorp/aws"
+                version = "~> 5.0"
             }
-        ]
-    })
-}
+        }
+    }
 
-// Creating IAM Policy (to be attached into Role and allow creating logs in CloudWatch)
-// https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy
-// Only allowing the logs resources. If all: Resource = "*"
-resource "aws_iam_policy" "lambda_iam_policy" {
-    name        = "asr_test_lambda_iam_policy"
-    path        = "/"
-    description = "AWS IAM Policy for Managing AWS Lambda Role"
-    policy = jsonencode({
-        Version = "2012-10-17"
-        Statement = [
-            {
-                Action = [
-                    "logs:CreateLogGroup",
-                    "logs:CreateLogStream",
-                    "logs:PutLogEvents"
-                ]
-                Effect   = "Allow"
-                Resource = "arn:aws:logs:*:*:*"
-            },
-        ]
-    })
-}
+    // Configuring the provider
+    // We could also define a profile = "nameProfile"
+    // If not set, "default" profile is taken
+    provider "aws" {
+        region = "eu-central-1"
+        shared_credentials_files = ["/Users/didie/.aws/credentials"]
+    }
 
-// Attaching IAM Policy to IAM Role
-// https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment
-resource "aws_iam_role_policy_attachment" "attach_iam_policy_iam_role"{
-    role        = aws_iam_role.lambda_role.name
-    policy_arn  = aws_iam_policy.lambda_iam_policy.arn
-}
+    /*  
+        *************************************************************
+        *********************** 1-lambda.tf *************************
+        *************************************************************
+    */    
 
-// Creating ZIP
-// https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file
-data "archive_file" "zip_js_code" {
-    type = "zip"
-    source_dir = "${path.module}/awsTest/"
-    output_path = "${path.module}/awsTest/lambdaHelloWorld.zip"
-}
+    // Creating IAM Role
+    // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role
+    // If following blog, you need to <<EOF but seems with newer versions now JSON is supported
+    resource "aws_iam_role" "lambda_role"{
+        name    =   "asr_test_lambda_role"
+        assume_role_policy  = jsonencode({
+            Version = "2012-10-17"
+            Statement = [
+                {
+                    Action = "sts:AssumeRole"
+                    Effect = "Allow"
+                    Sid    = ""
+                    Principal = {
+                        Service = "lambda.amazonaws.com"
+                    }
+                }
+            ]
+        })
+    }
 
-// Creating the Lambda Resource
-// https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function
-// role = TF name of role created previosuly
-// handler = JS_File "." Name_FX
-// depends_on = not built until attachment is performed
-resource "aws_lambda_function" "test_lambda_asr" {
-    filename        = "${path.module}/awsTest/lambdaHelloWorld.zip"
-    function_name   = "My_Incredible_Lambda_Test"
-    role            = aws_iam_role.lambda_role.arn
-    handler         = "lambda.handler"
-    runtime         = "nodejs20.x"
-    depends_on      = [aws_iam_role_policy_attachment.attach_iam_policy_iam_role]
-}
-``
+    // Creating IAM Policy (to be attached into Role and allow creating logs in CloudWatch)
+    // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy
+    // Only allowing the logs resources. If all: Resource = "*"
+    resource "aws_iam_policy" "lambda_iam_policy" {
+        name        = "asr_test_lambda_iam_policy"
+        path        = "/"
+        description = "AWS IAM Policy for Managing AWS Lambda Role"
+        policy = jsonencode({
+            Version = "2012-10-17"
+            Statement = [
+                {
+                    Action = [
+                        "logs:CreateLogGroup",
+                        "logs:CreateLogStream",
+                        "logs:PutLogEvents"
+                    ]
+                    Effect   = "Allow"
+                    Resource = "arn:aws:logs:*:*:*"
+                },
+            ]
+        })
+    }
+
+    // Attaching IAM Policy to IAM Role
+    // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment
+    resource "aws_iam_role_policy_attachment" "attach_iam_policy_iam_role"{
+        role        = aws_iam_role.lambda_role.name
+        policy_arn  = aws_iam_policy.lambda_iam_policy.arn
+    }
+
+    // Creating ZIP
+    // https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file
+    data "archive_file" "zip_js_code" {
+        type = "zip"
+        source_dir = "${path.module}/awsTest/"
+        output_path = "${path.module}/awsTest/lambdaHelloWorld.zip"
+    }
+
+    // Creating the Lambda Resource
+    // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function
+    // role = TF name of role created previosuly
+    // handler = JS_File "." Name_FX
+    // depends_on = not built until attachment is performed
+    resource "aws_lambda_function" "test_lambda_asr" {
+        filename        = "${path.module}/awsTest/lambdaHelloWorld.zip"
+        function_name   = "My_Incredible_Lambda_Test"
+        role            = aws_iam_role.lambda_role.arn
+        handler         = "lambda.handler"
+        runtime         = "nodejs20.x"
+        depends_on      = [aws_iam_role_policy_attachment.attach_iam_policy_iam_role]
+    }
+
+    /*  
+        *************************************************************
+        ********************* 2-apigateway.tf ***********************
+        *************************************************************
+    */    
+
+    // Building an HTTP API using default settings
+    // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/apigatewayv2_api
+    // https://advancedweb.hu/how-to-use-the-aws_apigatewayv2_api-to-add-an-http-api-to-a-lambda-function/#default-stage-and-route
+    resource "aws_apigatewayv2_api" "gw_test" {
+        name            = "asr_apigw_for_lambda"
+        protocol_type   = "HTTP"
+        target          = aws_lambda_function.test_lambda_asr.arn
+    }
+
+    resource "aws_lambda_permission" "lambda_access_permission"{
+        action          = "lambda:InvokeFunction"
+        function_name   = aws_lambda_function.test_lambda_asr.arn
+        principal       = "apigateway.amazonaws.com"
+
+        source_arn      = "${aws_apigatewayv2_api.gw_test.execution_arn}/*/*"
+    }
+
+    resource "aws_apigatewayv2_route" "files_route"{
+        api_id          = aws_apigatewayv2_api.gw_test.id
+        route_key       = "POST /files"
+    }
+
+    output "endpoint"{
+        description     = "HTTP API endpoint URL"
+        value           = aws_apigatewayv2_api.gw_test.api_endpoint
+    }
+
+    /*  
+        *************************************************************
+        ********************* 3-dyanamodb.tf ***********************
+        *************************************************************
+    */   
+
+    resource "aws_dynamodb_table" "basic-dynamodb-table" {
+        name           = "files"
+        billing_mode   = "PROVISIONED"
+        read_capacity  = 5
+        write_capacity = 5
+        hash_key       = "id" # Partition Key
+
+        # defining type of partition key: S - String
+        attribute {
+            name = "id"
+            type = "S"
+        }
+    }
+
+    resource "aws_iam_policy" "lambda_iam_policy_putItem" {
+        name        = "asr_test_lambda_iam_policy_putItem"
+        path        = "/"
+        description = "AWS IAM Policy for Putting Items into DynamoDB"
+        policy = jsonencode({
+            Version = "2012-10-17"
+            Statement = [
+                {
+                    Action = [
+                        "dynamodb:PutItem",
+                    ]
+                    Effect   = "Allow"
+                    Resource = "${aws_dynamodb_table.basic-dynamodb-table.arn}"
+                },
+            ]
+        })
+    }
+
+    resource "aws_iam_role_policy_attachment" "attach_iam_policy_iam_role_dynamo"{
+        role        = aws_iam_role.lambda_role.name
+        policy_arn  = aws_iam_policy.lambda_iam_policy_putItem.arn
+    }
+
+```
